@@ -1,31 +1,174 @@
-# ZUNTU DATA — backend + frontend
+// ZUNTU DATA — backend server
+// Handles: wallet funding via Paystack, real data/airtime purchase via VTpass.
+//
+// SETUP:
+//   1. npm install
+//   2. Copy .env.example to .env and fill in your real keys
+//   3. npm start
+//
+// IMPORTANT: This is a starter template, not a production-ready system.
+// Before going live you MUST add:
+//   - real user accounts + authentication (this demo keys everything off an email string)
+//   - Paystack webhook verification (don't only trust the client-side "verify" call)
+//   - HTTPS, rate limiting, input validation, logging
+//   - Confirm VTpass's current auth headers & endpoint paths against their live docs,
+//     since providers occasionally change these: https://www.vtpass.com/documentation/
 
-Cikakken tsari na sayar da data da airtime, mai haɗi da:
-- **Paystack** — cajin walat da kuɗin gaske
-- **VTpass** — sayar da data/airtime na gaske ga MTN, Glo, Airtel, 9mobile
+const express = require('express');
+const axios = require('axios');
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+require('dotenv').config();
 
-## Yadda ake gudanarwa a gida
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(express.static(__dirname));
 
-1. `npm install`
-2. Kwafi `.env.example` zuwa `.env`, sannan ka cika makullan API na gaske naka:
-   - `PAYSTACK_SECRET_KEY` daga dashboard.paystack.com
-   - `VTPASS_API_KEY` / `VTPASS_SECRET_KEY` daga vtpass.com (bayan ka yi rajista ka kuma caje walat ɗinka na VTpass)
-3. `npm start` — sabar za ta gudana akan `http://localhost:4000`
-4. Buɗe `http://localhost:4000` a burauzarka
+const PORT = process.env.PORT || 4000;
 
-## Muhimman abubuwa kafin ka fara amfani da kuɗin gaske
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+const VTPASS_API_KEY = process.env.VTPASS_API_KEY;
+const VTPASS_SECRET_KEY = process.env.VTPASS_SECRET_KEY;
+const VTPASS_BASE_URL = process.env.VTPASS_BASE_URL || 'https://sandbox.vtpass.com/api'; // switch to https://vtpass.com/api when live
 
-- **Bincika VTpass docs na yanzu** (vtpass.com/documentation) kafin ka tafi live — hanyoyin auth da endpoints na iya canzawa.
-- Wannan template na demo ne: yana amfani da fayil ɗin `db.json` maimakon ainihin database, kuma babu real login/authentication — kowa da imel zai iya amfani da wannan wallet. Kafin ka kai wannan ga jama'a, ka ƙara:
-  - Ingantaccen tsarin shiga (login/signup, password ko OTP)
-  - Paystack **webhook** don tabbatar da biyan kuɗi (kada ka dogara ga verify daga client kaɗai)
-  - Real database (Postgres, MongoDB, da sauransu)
-  - HTTPS da rate limiting
-- Don ka je "live" (ba sandbox ba), canza `VTPASS_BASE_URL` zuwa `https://vtpass.com/api` kuma yi amfani da live Paystack secret key (`sk_live_...`).
-- Sanya wannan backend akan sabis kamar Render, Railway, ko VPS naka — ba za a iya sanya shi a matsayin Claude artifact ba domin yana buƙatar sirrin API keys wanda ba za a iya adanawa lafiya a client-side ba.
+// ---------- tiny JSON "database" (replace with real DB in production) ----------
+const DB_PATH = path.join(__dirname, 'db.json');
+function readDB() {
+  if (!fs.existsSync(DB_PATH)) return { wallets: {} };
+  return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+}
+function writeDB(data) {
+  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+}
+function getWallet(email) {
+  const db = readDB();
+  if (!db.wallets[email]) db.wallets[email] = { balance: 0, tx: [] };
+  writeDB(db);
+  return db.wallets[email];
+}
+function updateWallet(email, mutateFn) {
+  const db = readDB();
+  if (!db.wallets[email]) db.wallets[email] = { balance: 0, tx: [] };
+  mutateFn(db.wallets[email]);
+  writeDB(db);
+  return db.wallets[email];
+}
 
-## Fayiloli
+// ---------- wallet ----------
+app.get('/api/wallet/:email', (req, res) => {
+  res.json(getWallet(req.params.email));
+});
 
-- `server.js` — Express backend, dukkan hanyoyin API
-- `public/index.html` — frontend da ke magana da backend
-- `.env.example` — jerin makullan da ake buƙata
+// Step 1: start a Paystack payment to fund the wallet
+app.post('/api/wallet/fund/initialize', async (req, res) => {
+  const { email, amount } = req.body; // amount in Naira
+  if (!email || !amount) return res.status(400).json({ error: 'email da amount ana bukatarsu' });
+  try {
+    const resp = await axios.post(
+      'https://api.paystack.co/transaction/initialize',
+      {
+        email,
+        amount: Math.round(amount * 100), // Paystack expects kobo
+        callback_url: req.body.callback_url,
+      },
+      { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } }
+    );
+    res.json(resp.data.data); // { authorization_url, access_code, reference }
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data?.message || 'Paystack init ya kasa' });
+  }
+});
+
+// Step 2: verify payment and credit wallet
+app.get('/api/wallet/fund/verify/:reference', async (req, res) => {
+  const { reference } = req.params;
+  const { email } = req.query;
+  try {
+    const resp = await axios.get(
+      `https://api.paystack.co/transaction/verify/${reference}`,
+      { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } }
+    );
+    const data = resp.data.data;
+    if (data.status === 'success') {
+      const nairaAmount = data.amount / 100;
+      const wallet = updateWallet(email, (w) => {
+        w.balance += nairaAmount;
+        w.tx.unshift({ label: 'Caje walat (Paystack)', sub: reference, amt: -nairaAmount, time: new Date().toISOString() });
+      });
+      return res.json({ success: true, wallet });
+    }
+    res.json({ success: false, status: data.status });
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data?.message || 'Ba a iya tabbatar da biyan kuɗi ba' });
+  }
+});
+
+// ---------- VTU: data plans lookup ----------
+// networkId examples per VTpass serviceID convention: mtn-data, glo-data, airtel-data, etesalat-data (9mobile)
+app.get('/api/vtu/plans/:serviceID', async (req, res) => {
+  try {
+    const resp = await axios.get(`${VTPASS_BASE_URL}/service-variations`, {
+      params: { serviceID: req.params.serviceID },
+      headers: { 'api-key': VTPASS_API_KEY, 'secret-key': VTPASS_SECRET_KEY },
+    });
+    res.json(resp.data);
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || 'Ba a samo shirye-shiryen data ba' });
+  }
+});
+
+// ---------- VTU: buy data ----------
+app.post('/api/vtu/data', async (req, res) => {
+  const { email, serviceID, variation_code, phone, amount } = req.body;
+  const wallet = getWallet(email);
+  if (wallet.balance < amount) return res.status(400).json({ error: 'Ba isashen kuɗi a walat ba' });
+
+  try {
+    const request_id = `zuntu_${Date.now()}`;
+    const resp = await axios.post(
+      `${VTPASS_BASE_URL}/pay`,
+      { request_id, serviceID, billersCode: phone, variation_code, phone, amount },
+      { headers: { 'api-key': VTPASS_API_KEY, 'secret-key': VTPASS_SECRET_KEY } }
+    );
+    if (resp.data.code === '000') {
+      updateWallet(email, (w) => {
+        w.balance -= amount;
+        w.tx.unshift({ label: `Data — ${serviceID}`, sub: phone, amt: amount, time: new Date().toISOString() });
+      });
+      return res.json({ success: true, result: resp.data });
+    }
+    res.status(400).json({ success: false, result: resp.data });
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || 'Sayan data ya kasa' });
+  }
+});
+
+// ---------- VTU: buy airtime ----------
+app.post('/api/vtu/airtime', async (req, res) => {
+  const { email, serviceID, phone, amount } = req.body; // serviceID: mtn, glo, airtel, etisalat
+  const wallet = getWallet(email);
+  if (wallet.balance < amount) return res.status(400).json({ error: 'Ba isashen kuɗi a walat ba' });
+
+  try {
+    const request_id = `zuntu_${Date.now()}`;
+    const resp = await axios.post(
+      `${VTPASS_BASE_URL}/pay`,
+      { request_id, serviceID, phone, amount },
+      { headers: { 'api-key': VTPASS_API_KEY, 'secret-key': VTPASS_SECRET_KEY } }
+    );
+    if (resp.data.code === '000') {
+      updateWallet(email, (w) => {
+        w.balance -= amount;
+        w.tx.unshift({ label: `Airtime — ${serviceID}`, sub: phone, amt: amount, time: new Date().toISOString() });
+      });
+      return res.json({ success: true, result: resp.data });
+    }
+    res.status(400).json({ success: false, result: resp.data });
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || 'Cajin airtime ya kasa' });
+  }
+});
+
+app.listen(PORT, () => console.log(`ZUNTU DATA backend yana gudana akan port ${PORT}`));
