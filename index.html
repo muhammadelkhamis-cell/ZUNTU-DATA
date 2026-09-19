@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ha">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ZUNTU DATA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0E1A13; --card:#152417; --text:#F1F6EE; --muted:#93A896;
+  --lime:#C6FF3D; --amber:#FFC94A; --coral:#FF7A5C;
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--text); font-family:'Inter',system-ui,sans-serif; min-height:100vh}
+h1,.balance,.price{font-family:'Space Grotesk'}
+header{padding:20px 18px 10px}
+.brand b{font-family:'Space Grotesk'; font-weight:700; font-size:20px}
+.brand span{color:var(--lime); font-weight:700; font-size:20px}
+.email-gate{margin:16px 18px; padding:16px; background:var(--card); border-radius:14px; border:1px solid #223425}
+.email-gate input{width:100%; padding:11px 12px; border-radius:10px; border:1px solid #223425; background:#0E1A13; color:var(--text); font-size:14px; margin-top:8px}
+.email-gate button{margin-top:10px; width:100%; padding:11px 0; background:var(--lime); color:#0E1A13; border:none; border-radius:10px; font-weight:700; cursor:pointer}
+.wallet{margin:6px 18px; padding:18px 20px; border-radius:18px; background:linear-gradient(135deg,#1B2E1D,#12220F 70%); border:1px solid #24391F}
+.wallet .row{display:flex; justify-content:space-between; align-items:flex-end}
+.balance{font-size:30px; color:var(--lime); font-weight:700}
+.topup-btn{background:var(--text); color:#0E1A13; border:none; border-radius:10px; padding:9px 14px; font-weight:600; font-size:13px; cursor:pointer}
+.tabs{display:flex; gap:8px; margin:18px 18px 10px}
+.tab{flex:1; text-align:center; padding:10px 0; border-radius:12px; font-weight:600; font-size:14px; background:var(--card); color:var(--muted); border:1px solid #223425; cursor:pointer}
+.tab.active{background:var(--lime); color:#0E1A13; border-color:var(--lime)}
+section{padding:0 18px 20px; display:none}
+section.active{display:block}
+.net-row{display:flex; gap:8px; overflow-x:auto; padding:4px 0 14px}
+.net-chip{flex:0 0 auto; padding:9px 14px; border-radius:999px; background:var(--card); border:1px solid #223425; color:var(--muted); font-size:13px; font-weight:600; cursor:pointer}
+.net-chip.active{color:var(--text); border-color:var(--lime)}
+.plan{display:flex; justify-content:space-between; align-items:center; background:var(--card); border:1px solid #1E3220; border-radius:14px; padding:14px 16px; margin-bottom:10px}
+.plan .price{color:var(--amber); font-weight:700; margin-right:10px}
+.buy{background:var(--lime); color:#0E1A13; border:none; border-radius:10px; padding:9px 16px; font-weight:700; font-size:13px; cursor:pointer}
+.buy:disabled{opacity:.4}
+.custom-row{display:flex; gap:8px; margin-bottom:14px}
+.custom-row input{flex:1; background:var(--card); border:1px solid #1E3220; border-radius:12px; padding:12px 14px; color:var(--text); font-size:15px}
+.big-buy{width:100%; background:var(--lime); color:#0E1A13; border:none; border-radius:14px; padding:15px 0; font-weight:700; font-size:15px; cursor:pointer}
+.hist{padding:0 18px 30px}
+.tx{display:flex; justify-content:space-between; padding:11px 0; border-bottom:1px solid #1E3220; font-size:13.5px}
+.tx .t-amt{color:var(--coral); font-weight:600}
+.empty{color:var(--muted); font-size:13.5px}
+.toast{position:fixed; left:18px; right:18px; bottom:20px; background:var(--lime); color:#0E1A13; padding:13px 16px; border-radius:12px; font-weight:600; text-align:center; transform:translateY(140%); transition:transform .3s; z-index:20}
+.toast.show{transform:translateY(0)}
+</style>
+</head>
+<body>
+
+<header><div class="brand"><b>ZUNTU</b> <span>DATA</span></div></header>
+
+<div class="email-gate" id="emailGate">
+  <div style="color:var(--muted); font-size:13px">Shigar da imel ɗinka don buɗe walat</div>
+  <input type="email" id="emailInput" placeholder="kai@misali.com">
+  <button onclick="setEmail()">Ci gaba</button>
+</div>
+
+<div id="app" style="display:none">
+  <div class="wallet">
+    <div style="color:var(--muted); font-size:13px">Ma'aunin walat — <span id="emailShown"></span></div>
+    <div class="row">
+      <div class="balance" id="balanceDisplay">₦0</div>
+      <button class="topup-btn" onclick="fundWallet()">+ Caje walat</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('data')">Data</div>
+    <div class="tab" onclick="switchTab('airtime')">Airtime</div>
+  </div>
+
+  <section id="dataSection" class="active">
+    <div class="net-row" id="netRow"></div>
+    <div id="planList"></div>
+  </section>
+
+  <section id="airtimeSection">
+    <div class="net-row" id="netRowAirtime"></div>
+    <div class="custom-row"><input type="number" id="customAmt" placeholder="Adadin kuɗi (₦)"></div>
+    <button class="big-buy" onclick="buyAirtime()">Saya airtime</button>
+  </section>
+
+  <div class="hist">
+    <div style="color:var(--muted); font-size:14px; margin-bottom:10px">Tarihin ciniki</div>
+    <div id="txList"><div class="empty">Babu ciniki tukuna.</div></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Point this at your deployed backend (server.js). Locally this defaults to same-origin.
+const API = ''; // e.g. 'https://your-backend.onrender.com'
+
+const NETWORKS = [
+  {id:'mtn-data', airtime:'mtn', name:'MTN'},
+  {id:'glo-data', airtime:'glo', name:'Glo'},
+  {id:'airtel-data', airtime:'airtel', name:'Airtel'},
+  {id:'etisalat-data', airtime:'etisalat', name:'9mobile'},
+];
+let email = localStorage.getItem('zuntu_email') || '';
+let network = NETWORKS[0];
+let airtimeNetwork = NETWORKS[0];
+let plans = [];
+
+function setEmail(){
+  const v = document.getElementById('emailInput').value.trim();
+  if(!v) return;
+  email = v;
+  localStorage.setItem('zuntu_email', email);
+  boot();
+}
+
+async function boot(){
+  if(!email){ return; }
+  document.getElementById('emailGate').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('emailShown').textContent = email;
+  renderNets();
+  await refreshWallet();
+  await loadPlans();
+}
+
+async function refreshWallet(){
+  const res = await fetch(`${API}/api/wallet/${encodeURIComponent(email)}`);
+  const wallet = await res.json();
+  document.getElementById('balanceDisplay').textContent = '₦' + wallet.balance.toLocaleString('en-NG');
+  renderTx(wallet.tx || []);
+}
+
+function renderNets(){
+  const row = document.getElementById('netRow');
+  const row2 = document.getElementById('netRowAirtime');
+  row.innerHTML = ''; row2.innerHTML = '';
+  NETWORKS.forEach(n=>{
+    const c1 = document.createElement('div');
+    c1.className = 'net-chip' + (network.id===n.id?' active':'');
+    c1.textContent = n.name;
+    c1.onclick = ()=>{ network=n; renderNets(); loadPlans(); };
+    row.appendChild(c1);
+
+    const c2 = document.createElement('div');
+    c2.className = 'net-chip' + (airtimeNetwork.id===n.id?' active':'');
+    c2.textContent = n.name;
+    c2.onclick = ()=>{ airtimeNetwork=n; renderNets(); };
+    row2.appendChild(c2);
+  });
+}
+
+async function loadPlans(){
+  const list = document.getElementById('planList');
+  list.innerHTML = '<div class="empty">Ana lodin shirye-shirye…</div>';
+  try{
+    const res = await fetch(`${API}/api/vtu/plans/${network.id}`);
+    const data = await res.json();
+    plans = (data.content?.varations || data.content?.variations || []);
+    list.innerHTML = '';
+    plans.forEach(pl=>{
+      const row = document.createElement('div');
+      row.className = 'plan';
+      row.innerHTML = `<div><b>${pl.name}</b></div>
+        <div style="display:flex;align-items:center">
+          <div class="price">₦${Number(pl.variation_amount).toLocaleString('en-NG')}</div>
+          <button class="buy">Saya</button>
+        </div>`;
+      row.querySelector('.buy').onclick = ()=> buyData(pl);
+      list.appendChild(row);
+    });
+    if(plans.length===0) list.innerHTML = '<div class="empty">Ba a samo shirye-shirye ba. Duba VTPASS_BASE_URL da makullan API.</div>';
+  }catch(e){
+    list.innerHTML = '<div class="empty">An kasa haɗawa da backend. Tabbatar sabar tana gudana.</div>';
+  }
+}
+
+async function buyData(pl){
+  const phone = prompt('Shigar da lambar waya:');
+  if(!phone) return;
+  const res = await fetch(`${API}/api/vtu/data`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ email, serviceID: network.id, variation_code: pl.variation_code, phone, amount: Number(pl.variation_amount) })
+  });
+  const data = await res.json();
+  if(data.success){ showToast('An saya data — nasara!'); refreshWallet(); }
+  else showToast(data.error?.response_description || 'Sayan data ya kasa');
+}
+
+async function buyAirtime(){
+  const amount = Number(document.getElementById('customAmt').value);
+  if(!amount) return showToast('Shigar da adadin kuɗi');
+  const phone = prompt('Shigar da lambar waya:');
+  if(!phone) return;
+  const res = await fetch(`${API}/api/vtu/airtime`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ email, serviceID: airtimeNetwork.airtime, phone, amount })
+  });
+  const data = await res.json();
+  if(data.success){ showToast('An caje airtime — nasara!'); refreshWallet(); }
+  else showToast(data.error?.response_description || 'Cajin airtime ya kasa');
+}
+
+async function fundWallet(){
+  const amount = Number(prompt('Nawa kake son cajewa (₦)?'));
+  if(!amount) return;
+  const res = await fetch(`${API}/api/wallet/fund/initialize`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ email, amount, callback_url: window.location.href })
+  });
+  const data = await res.json();
+  if(data.authorization_url) window.location.href = data.authorization_url;
+  else showToast('An kasa fara biyan kuɗi');
+}
+
+// Handle return from Paystack (URL will include ?reference=xxxx)
+async function checkPaystackReturn(){
+  const params = new URLSearchParams(window.location.search);
+  const reference = params.get('reference') || params.get('trxref');
+  if(!reference || !email) return;
+  const res = await fetch(`${API}/api/wallet/fund/verify/${reference}?email=${encodeURIComponent(email)}`);
+  const data = await res.json();
+  if(data.success){ showToast('An caje walat — nasara!'); refreshWallet(); }
+  window.history.replaceState({}, '', window.location.pathname);
+}
+
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach((t,i)=> t.classList.toggle('active', (tab==='data')===(i===0)));
+  document.getElementById('dataSection').classList.toggle('active', tab==='data');
+  document.getElementById('airtimeSection').classList.toggle('active', tab==='airtime');
+}
+
+function renderTx(tx){
+  const list = document.getElementById('txList');
+  if(!tx.length){ list.innerHTML = '<div class="empty">Babu ciniki tukuna.</div>'; return; }
+  list.innerHTML = '';
+  tx.slice(0,15).forEach(t=>{
+    const row = document.createElement('div');
+    row.className = 'tx';
+    row.innerHTML = `<div><b>${t.label}</b><div style="color:var(--muted);font-size:12px">${t.sub}</div></div><div class="t-amt">${t.amt<0?'+':'-'}₦${Math.abs(t.amt).toLocaleString('en-NG')}</div>`;
+    list.appendChild(row);
+  });
+}
+
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+if(email){ document.getElementById('emailInput').value = email; boot().then(checkPaystackReturn); }
+</script>
+</body>
+</html>
