@@ -171,4 +171,4 @@ app.post('/api/vtu/airtime', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`ZUNTU DATA backend yana gudana akan port ${PORT}`));
+app.listen(PORT, () => console.log(`ZUNTU DATA backend yana gudana akan port ${PORT}`)); 
