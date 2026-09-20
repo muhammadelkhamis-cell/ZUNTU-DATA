@@ -177,13 +177,17 @@ async function loadPlans(){
 async function buyData(pl){
   const phone = prompt('Shigar da lambar waya:');
   if(!phone) return;
-  const res = await fetch(`${API}/api/vtu/data`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ email, serviceID: network.id, variation_code: pl.variation_code, phone, amount: Number(pl.variation_amount) })
-  });
-  const data = await res.json();
-  if(data.success){ showToast('An saya data — nasara!'); refreshWallet(); }
-  else showToast(data.error?.response_description || 'Sayan data ya kasa');
+  try{
+    const res = await fetch(`${API}/api/vtu/data`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, serviceID: network.id, variation_code: pl.variation_code, phone, amount: Number(pl.variation_amount) })
+    });
+    const data = await res.json();
+    if(data.success){ showToast('An saya data — nasara!'); refreshWallet(); }
+    else alert('KUSKURE DAGA SABAR:\n' + JSON.stringify(data, null, 2));
+  }catch(e){
+    alert('KUSKUREN HAƊAWA:\n' + e.message);
+  }
 }
 
 async function buyAirtime(){
